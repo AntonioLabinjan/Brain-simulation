@@ -1,3 +1,4 @@
+#~ simulation of spiking cnn, but not really
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
