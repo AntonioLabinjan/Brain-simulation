@@ -1,55 +1,66 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Parameters
-T = 200            # total simulation time (ms)
-dt = 1             # time step (ms)
+# Simulation parameters
+T = 200           # total time (ms)
+dt = 1            # time step (ms)
 time = np.arange(0, T+dt, dt)
 
-# Neuron parameters (LIF model)
-V_rest = -65       # resting potential (mV)
-V_reset = -70      # reset potential (mV)
-V_th = -50         # spike threshold (mV)
-R = 10             # resistance (MΩ)
-tau = 10           # membrane time constant (ms)
+# Network parameters
+N = 100             # number of neurons
+V_rest = -65      # resting potential (mV)
+V_reset = -70     # reset potential (mV)
+V_th = -50        # spike threshold (mV)
+R = 10            # resistance (MΩ)
+tau = 10          # membrane time constant (ms)
 
-# Input current (constant + noise)
-I_mean = 1.5       # nA
-I = I_mean + 0.5*np.random.randn(len(time))
+# Connectivity (random excitatory/inhibitory)
+np.random.seed(42)
+W = np.random.randn(N, N) * 0.5  # weights matrix
+for i in range(N):
+    W[i,i] = 0  # no self-connections
 
-# Initialize membrane potential
-V = np.zeros(len(time))
-V[0] = V_rest
+# Input currents (random noise)
+I_mean = 1.5
+I = I_mean + 0.5*np.random.randn(N, len(time))
 
-spikes = []
+# Initialize membrane potentials
+V = np.ones((N, len(time))) * V_rest
+spikes = np.zeros((N, len(time)))
 
 # Simulation loop
 for t in range(1, len(time)):
-    dV = (-(V[t-1]-V_rest) + R*I[t]) / tau
-    V[t] = V[t-1] + dV*dt
+    for n in range(N):
+        # Sum of weighted spikes from other neurons at previous step
+        I_syn = np.sum(W[:,n] * spikes[:,t-1])
+        dV = (-(V[n,t-1]-V_rest) + R*(I[n,t] + I_syn)) / tau
+        V[n,t] = V[n,t-1] + dV*dt
 
-    # Check for spike
-    if V[t] >= V_th:
-        V[t] = 30  # spike peak (for visualization)
-        spikes.append(time[t])
-        V[t+1 if t+1 < len(time) else t] = V_reset
+        # Spike check
+        if V[n,t] >= V_th:
+            V[n,t] = 30      # spike peak for visualization
+            spikes[n,t] = 1  # record spike
+            if t+1 < len(time):
+                V[n,t+1] = V_reset
 
-# Plot results
-plt.figure(figsize=(10,5))
-
-plt.subplot(2,1,1)
-plt.plot(time, I, color="purple")
-plt.ylabel("Input current (nA)")
-plt.title("Neuron Input and Spiking Activity")
-plt.grid(True)
-
-plt.subplot(2,1,2)
-plt.plot(time, V, color="black")
-plt.axhline(V_th, color="red", linestyle="--", label="Threshold")
-plt.ylabel("Membrane Potential (mV)")
+# Plot spikes as raster
+plt.figure(figsize=(10,6))
+for n in range(N):
+    spike_times = time[spikes[n,:]==1]
+    plt.vlines(spike_times, n+0.5, n+1.5)
 plt.xlabel("Time (ms)")
-plt.legend()
-plt.grid(True)
+plt.ylabel("Neuron")
+plt.title("Spike Raster Plot of Neuron Network")
+plt.ylim(0.5, N+0.5)
+plt.show()
 
-plt.tight_layout()
+# Optional: plot membrane potentials
+plt.figure(figsize=(10,6))
+for n in range(N):
+    plt.plot(time, V[n,:], label=f'Neuron {n+1}')
+plt.axhline(V_th, color='red', linestyle='--', label='Threshold')
+plt.xlabel("Time (ms)")
+plt.ylabel("Membrane Potential (mV)")
+plt.title("Membrane Potentials of Neuron Network")
+plt.legend()
 plt.show()
