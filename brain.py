@@ -1,66 +1,90 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
-# Simulation parameters
+# --- PARAMETERS ---
 T = 200           # total time (ms)
 dt = 1            # time step (ms)
 time = np.arange(0, T+dt, dt)
 
-# Network parameters
-N = 100             # number of neurons
-V_rest = -65      # resting potential (mV)
-V_reset = -70     # reset potential (mV)
-V_th = -50        # spike threshold (mV)
-R = 10            # resistance (MΩ)
-tau = 10          # membrane time constant (ms)
+N = 100
+V_rest = -65
+V_reset = -70
+V_th = -50
+R = 10
+tau = 10
 
 # Connectivity (random excitatory/inhibitory)
 np.random.seed(42)
-W = np.random.randn(N, N) * 0.5  # weights matrix
-for i in range(N):
-    W[i,i] = 0  # no self-connections
+W = np.random.randn(N, N) * 0.5
+np.fill_diagonal(W, 0)
 
-# Input currents (random noise)
+# Input currents
 I_mean = 1.5
 I = I_mean + 0.5*np.random.randn(N, len(time))
 
-# Initialize membrane potentials
-V = np.ones((N, len(time))) * V_rest
+# Membrane potentials
+V = np.ones(N) * V_rest
 spikes = np.zeros((N, len(time)))
 
-# Simulation loop
-for t in range(1, len(time)):
+# Precompute spikes
+for t_idx, t in enumerate(time):
     for n in range(N):
-        # Sum of weighted spikes from other neurons at previous step
-        I_syn = np.sum(W[:,n] * spikes[:,t-1])
-        dV = (-(V[n,t-1]-V_rest) + R*(I[n,t] + I_syn)) / tau
-        V[n,t] = V[n,t-1] + dV*dt
+        I_syn = np.sum(W[:, n] * spikes[:, t_idx-1] if t_idx>0 else 0)
+        dV = (-(V[n]-V_rest) + R*(I[n, t_idx] + I_syn)) / tau
+        V[n] += dV*dt
 
-        # Spike check
-        if V[n,t] >= V_th:
-            V[n,t] = 30      # spike peak for visualization
-            spikes[n,t] = 1  # record spike
-            if t+1 < len(time):
-                V[n,t+1] = V_reset
+        if V[n] >= V_th:
+            V[n] = 30
+            spikes[n, t_idx] = 1
+            V[n] = V_reset
 
-# Plot spikes as raster
-plt.figure(figsize=(10,6))
-for n in range(N):
-    spike_times = time[spikes[n,:]==1]
-    plt.vlines(spike_times, n+0.5, n+1.5)
-plt.xlabel("Time (ms)")
-plt.ylabel("Neuron")
-plt.title("Spike Raster Plot of Neuron Network")
-plt.ylim(0.5, N+0.5)
-plt.show()
+# --- 2D NEURON POSITIONS ---
+grid_size = int(np.sqrt(N))
+x, y = np.meshgrid(np.arange(grid_size), np.arange(grid_size))
+x = x.flatten()
+y = y.flatten()
 
-# Optional: plot membrane potentials
-plt.figure(figsize=(10,6))
-for n in range(N):
-    plt.plot(time, V[n,:], label=f'Neuron {n+1}')
-plt.axhline(V_th, color='red', linestyle='--', label='Threshold')
-plt.xlabel("Time (ms)")
-plt.ylabel("Membrane Potential (mV)")
-plt.title("Membrane Potentials of Neuron Network")
-plt.legend()
+# --- ANIMATION SETUP ---
+fig, ax = plt.subplots(figsize=(8,8))
+ax.set_xlim(-1, grid_size)
+ax.set_ylim(-1, grid_size)
+ax.set_xticks([])
+ax.set_yticks([])
+ax.set_facecolor('black')
+ax.set_title("2D Neuron Network Simulation", color='white')
+
+# Neuron scatter
+scat = ax.scatter(x, y, c='blue', s=50)
+
+# Draw lines for connectivity
+lines = []
+for i in range(N):
+    for j in range(N):
+        if W[i,j] != 0:
+            line, = ax.plot([], [], color='yellow', alpha=0.1)
+            lines.append((i, j, line))
+
+# Update function for animation
+def update(frame):
+    # Update neuron colors and sizes
+    sizes = 50 + 200*spikes[:, frame]  # spike pulses
+    colors = np.where(spikes[:, frame]==1, 'red', 'blue')
+    scat.set_sizes(sizes)
+    scat.set_color(colors)
+    
+    # Update connection lines (flash if presynaptic neuron spikes)
+    for i,j,line in lines:
+        if spikes[i, frame]==1:
+            line.set_data([x[i], x[j]], [y[i], y[j]])
+            line.set_alpha(0.7)
+        else:
+            line.set_alpha(0.05)
+    
+    # Return all artists as a single flat list
+    all_artists = [scat] + [line for _, _, line in lines]
+    return all_artists
+
+# Create animation
+ani = FuncAnimation(fig, update, frames=len(time), interval=50, blit=True)
 plt.show()
